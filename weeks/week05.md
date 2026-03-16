@@ -1,6 +1,7 @@
 # Week 05 (03-31~04-06)
 
-- Keyword: Application Layer 2 (DNS, P2P, Video/CDN)
-- Primary: Ch2 2.4~2.6 p.152~181
-- v9 PPT: Ch2 67~99
-- Deliverable: DNS 질의 경로 + P2P/Client-Server 비교
+- Operation: Compression 3
+- Keyword: HTTP / Email / DNS core
+- Primary: Ch2 2.2~2.4 p.125~165
+- v9 PPT: Ch2 18~83
+- Deliverable: HTTP-Email-DNS 흐름 비교표
