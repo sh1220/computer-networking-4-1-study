@@ -177,15 +177,15 @@ while True:
 - 라우터는 데이터그램의 네트워크 계층 필드만 처리하며, 캔슐화된 전송 계층 세그먼트는 검사하지 않음
 ## 3.1.1 전송 계층과 네트워크 계층의 관계
 전송 계층은 프로세스(processes) 간의 논리적 통신을, 네트워크 계층은 호스트(hosts) 간의 논리적 통신을 제공한다. 이 차이를 비유(household analogy)로 설명한다.
-### 가정 비유 (Household Analogy)
+### 비유 (Household Analogy)
 - 동부 해안과 서부 해안에 각각 12명의 아이가 사는 두 집이 있다
 - Ann과 Bill이 각 집에서 우편물 수집/배분 담당 → 사촌들 관점에서 Ann/Bill이 공 우편 서비스 역할
 - 대응 관계:
--   • 편지 (letters) = 애플리케이션 메시지 (application messages)
--   • 사촌 (cousins) = 프로세스 (processes)
--   • 집 (houses) = 호스트 (hosts / end systems)
--   • Ann과 Bill = 전송 계층 프로토콜 (transport-layer protocol)
--   • 우편 서비스 (postal service) = 네트워크 계층 프로토콜 (network-layer protocol)
+-   편지 (letters) = 애플리케이션 메시지 (application messages)
+-   사촌 (cousins) = 프로세스 (processes)
+-   집 (houses) = 호스트 (hosts / end systems)
+-   Ann과 Bill = 전송 계층 프로토콜 (transport-layer protocol)
+-   우편 서비스 (postal service) = 네트워크 계층 프로토콜 (network-layer protocol)
 ### 핵심
 - 전송 프로토콜은 종단 시스템 내에만 존재 — 네트워크 핵심(network core)에서 메시지 이동에는 관여하지 않음
 - 전송 프로토콜이 제공할 수 있는 서비스는 기반 네트워크 계층 프로토콜의 서비스 모델에 의해 제한됨
