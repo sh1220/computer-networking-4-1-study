@@ -1,1180 +1,392 @@
-1. TCP 개요
-1-1. TCP
+## 1. DNS
+
+### 1-1. DNS 레코드 예시
+
+- 하나의 도메인에는 여러 종류의 DNS 레코드가 들어갈 수 있음
+    - 대표적인 레코드
+        - **A 레코드** : 호스트 이름을 IP 주소에 매핑
+        - **MX 레코드** : 메일 서버 지정
+        - **NS 레코드** : 해당 도메인의 authoritative name server 지정
+
+> 즉, DNS는 단순히 웹 주소를 IP로 바꾸는 기능만 하는 것이 아니라, **웹 서버, 메일 서버, 권한 DNS 서버 정보까지 함께 관리** 하는 구조임
+> 
+
+### 1-2. 이름 해석 과정
+
+- 사용자가 `www.networkutopia.com` 같은 주소에 접속하려 하면, 먼저 로컬 DNS 서버가 질의를 시작함
+- 이후 root DNS server → TLD DNS server → authoritative DNS server를 차례대로 거치며 최종 IP 주소를 알아냄
+- 그 뒤 브라우저가 해당 서버와 HTTP 연결을 시작할 수 있음
+
+> 즉 DNS는 웹, 메일, CDN 같은 인터넷 응용 서비스가 동작하기 전에 필요한 **이름 해석 단계**임
+> 
+
+---
+
+## 2. P2P 파일 배포 (Peer-to-Peer File Distribution)
+
+### 2-1. P2P 파일 배포의 기본 개념
+
+- **클라이언트-서버 구조**에서는 **서버가 모든 사용자에게 파일을 직접 보내야 함**
+- 따라서 사용자가 많아질수록 **서버 업로드 부담이 병목**이 되기 쉬움
+- 반면 **P2P(peer-to-peer)** 에서는 **파일을 받는 피어도 동시에 다른 피어에게 파일 일부를 업로드**할 수 있음
+- 즉 참여자가 많아질수록 단순히 수요만 늘어나는 것이 아니라, **시스템 전체 업로드 자원도 함께 증가**함
+- 이것이 P2P의 가장 큰 장점이며, 이를 **자체 확장성(Self-scalability)** 이라고 함
+
+### 2-2. 클라이언트-서버 방식의 배포 시간
+![img](https://velog.velcdn.com/images/oksk6681/post/a5dc8584-59eb-484e-b0b2-60ef41624ac2/image.png)
+- 파일 크기를 $F$, 서버 업로드 속도를 $u_s$, 피어 수를 $N$, 가장 느린 다운로드 속도를 $d_{\min}$ 이라고 하면
+- 서버는 전체 사용자에게 총 $NF$ 비트를 보내야 하므로 최소 $NF / u_s$ 시간이 필요함
+- 또 가장 느린 사용자는 최소 $F / d_{\min}$ 시간은 걸릴 수밖에 없음
+- 따라서 클라이언트-서버 구조의 최소 배포 시간 하한은 **$D_{c-s} ≥ \max(NF / u_s, F / d_{\min})$**  임
+- 이 식의 핵심은 피어 수 $N$이 커질수록 배포 시간이 거의 선형적으로 증가한다는 점임
+
+### 2-3. P2P 방식의 배포 시간
+![img](https://velog.velcdn.com/images/oksk6681/post/ee7a7992-244b-411b-b39a-7e98c12875a4/image.png)
+- P2P에서는 서버만 업로드하는 것이 아니라, 각 피어도 업로드에 참여함
+- 따라서 전체 업로드 능력은 $u_s + Σu_i$ 로 커질 수 있음
+- 이 경우 최소 배포 시간 하한은 **$D_{p2p} ≥ \max(F / u_s, F / d_{\min}, NF / (u_s + Σu_i))$** 임
+    
+- 즉 **사용자 수가 많아져도 그만큼 전체 업로드 용량도 증가**하므로, 클라이언트-서버 방식보다 훨씬 잘 확장됨
+- 교재의 비교 그래프에서도 클라이언트-서버는 급격히 증가하고, P2P는 훨씬 완만하게 증가하는 것으로 설명됨
+
+### 2-4. 비트토렌트(BitTorrent)의 기본 구조
+![img](https://velog.velcdn.com/images/oksk6681/post/bb89aa39-f3d7-4f23-9d2b-66dc92838479/image.png)
+- 비트토렌트는 대표적인 P2P 파일 배포 시스템임
+- 파일 배포에 참여하는 피어들의 모임을 **토렌트(Torrent)** 라고 부름
+- 파일은 보통 약 **256KB 크기의 청크(Chunk)** 단위로 나누어 전송함
+- 피어는 파일 전체를 다 받은 뒤에만 업로드하는 것이 아니라, 자신이 이미 받은 chunk를 다른 피어에게 곧바로 보낼 수 있음
+- 즉 다운로드와 업로드가 동시에 진행되는 구조임
+
+### 2-5. 트래커(Tracker)와 연결 과정
+
+- **트래커(Tracker)** 는 **특정 토렌트에 참여하는 피어들을 추적하고 관리**하는 인프라 노드임
+- 새 피어가 토렌트에 참여하면 먼저 트래커에 접속하여 현재 참여 중인 피어 목록 일부를 받음
+- 예시에서는 Alice가 약 50명의 피어 목록을 받아, 일부와 동시에 TCP 연결을 맺고 이웃 피어(neighboring peers)가 되는 과정을 설명함
+- 이후 Alice는 이웃 피어들과 chunk를 교환하면서 파일을 점차 완성해 감
+- 이웃 피어 집합은 고정되어 있지 않고, 피어의 참여와 이탈에 따라 계속 변할 수 있음
+
+### 2-6. 청크 요청 전략: Rarest First
+
+- **비트토렌트**는 자신이 아직 가지지 않은 chunk들 중에서 **복제본 수가 가장 적은 희귀한 chunk** 를 먼저 요청함
+- 이를 **Rarest First** 라고 함
+- 이렇게 해야 특정 chunk가 너무 적은 피어에게만 남는 상황을 줄일 수 있음
+- 즉 전체 토렌트 안에서 데이터가 균형 있게 퍼지도록 유지하기 위한 전략임
+
+### 2-7. 거래 알고리즘: Tit-for-Tat
+![img](https://velog.velcdn.com/images/oksk6681/post/fd697ff9-ba83-4866-8572-bb74533bfdbe/image.png)
+- **비트토렌트**는 **나에게 잘 보내주는 피어에게 나도 우선적으로 보내주는 구조**를 가짐
+- 이를 보통 **Tit-for-Tat 성격의 거래 알고리즘** 이라고 설명함
+- **Unchoked**
+    - 약 10초마다 **자신에게 가장 빠른 속도로 데이터를 주는 상위 4명의 피어를 선정**해 데이터를 보내줌
+- **Optimistically Unchoked**
+    - 약 30초마다 무작위로 1명을 추가 선택해 데이터를 보내줌
+    - 새로운 좋은 파트너를 탐색하기 위한 장치임
+- 이런 구조는 무임승차를 어느 정도 억제하고, 상호 업로드를 유도하는 역할을 함
+
+### 2-8. 비트토렌트의 추가 세부 기법
+
+- **Random First Piece**
+    - 처음 들어온 피어는 rarest first 전에 무작위로 몇 개 chunk를 먼저 받아 빨리 업로드 가능한 상태가 되도록 함
+- **Pipelining**
+    - 하나의 chunk를 **더 작은 block들로 나누고, 여러 요청을 겹쳐 보내** RTT 낭비를 줄임
+- **Endgame Mode**
+    - 마지막 몇 개 block이 남았을 때 **여러 피어에게 중복 요청**을 보내 가장 먼저 오는 것을 사용함
+- **Anti-snubbing**
+    - 계속 데이터를 잘 주지 않는 피어를 덜 우선시하고, **더 협조적인 피어와의 교환을 늘리는 방식**임
+- 즉 비트토렌트는 단순 파일 공유가 아니라, 성능과 공정성을 높이기 위한 여러 세부 전략 위에서 동작함
+
+### 2-9. DHT
+
+- DHT(Distributed Hash Table)는 분산 환경에서 **키-값 정보를 저장하고 검색하는 구조**임
+- 일부 P2P 시스템은 중앙 서버 없이도 이런 분산 구조를 사용해 자원 위치나 피어 정보를 찾음
+
+---
+
+## 3. 비디오 스트리밍 및 DASH
+
+### 3-1. 인터넷 비디오의 기본 특성
+
+- 비디오는 초당 **약 24~30장의 이미지가 연속적으로 재생되는 데이터**임
+- 각 이미지는 픽셀 배열로 구성됨
+- 비디오 압축에서는 두 가지 중복 제거 방식을 사용함
+    - **공간 코딩(Spatial Coding)** : 한 프레임 내부 중복 제거
+    - **시간 코딩(Temporal Coding)** : 연속 프레임 사이 차이만 전송
+- 인코딩 방식에는
+    - **CBR(Constant Bit Rate)** : 비트레이트가 고정된 방식
+    - **VBR(Variable Bit Rate)** : 장면 변화에 따라 비트레이트가 달라지는 방식
+    이 있음
+
+### 3-2. 스트리밍의 핵심 문제
+
+- 스트리밍 비디오는 **인터넷 대역폭의 매우 큰 비중을 차지하는 핵심 서비스**임
+- 슬라이드에선 etflix, YouTube, Amazon Prime이 가정용 ISP 트래픽의 큰 비중을 차지한다고 설명
+- 스트리밍의 핵심 문제는
+    - **규모(scale)** : 많은 사용자에게 서비스를 해야 함
+    - **이질성(heterogeneity)** : 사용자마다 네트워크 환경과 단말 성능이 다름
+    이라는 점임
+- 또한 **서버-클라이언트 대역폭**은 시간에 따라 달라질 수 있고, 혼잡이 생기면 **패킷 손실과 지연이 발생**할 수 있음
+- 그 결과 재생 끊김, 시작 지연, 화질 저하가 생길 수 있음
+
+### 3-3. 저장된 비디오 스트리밍과 연속 재생 조건
+
+- 저장된 비디오 스트리밍에서는 서버가 비디오를 보내는 동안, 클라이언트는 앞부분을 먼저 재생할 수 있음
+- 즉 **다 받은 뒤 재생** 이 아니라 **받으면서 재생** 하는 구조임
+- 사용자는 비디오가 원래 타이밍에 맞게 끊기지 않고 재생되길 기대하는데, 이를 **continuous playout constraint** 라고 함
+- 그러나 실제 네트워크 지연은 일정하지 않고 jitter가 존재함
+- 따라서 클라이언트는 먼저 일정량의 데이터를 버퍼에 모은 뒤 재생을 시작해야 함
+
+### 3-4. Playout buffering
+
+- 클라이언트가 일정량의 비디오 청크를 먼저 받아 두는 과정을 **playout buffering** 이라고 함
+- 이때 생기는 지연이 **playout delay** 임
+- 클라이언트 버퍼는 네트워크 지연 변화와 혼잡을 완충하는 역할을 함
+
+### 3-5. 사용자 상호작용과 추가 문제
+
+- 스트리밍 시스템은 단순히 앞에서부터 순서대로 재생만 고려하면 안 됨
+- 사용자는
+    - pause
+    - fast-forward
+    - rewind
+    - 특정 위치 점프
+    같은 상호작용을 할 수 있음
+- 또한 패킷 손실과 재전송 문제도 함께 고려해야 함
+- 따라서 스트리밍 시스템은 네트워크 변화뿐 아니라 사용자 행동도 함께 고려해야 함
+
+### 3-6. HTTP 스트리밍
+
+- 비디오는 일반적인 **HTTP GET** 으로도 전송 가능함
+- 클라이언트는 비디오 파일을 받아 로컬 버퍼에 저장하고, 일정량이 쌓이면 재생을 시작함
+- HTTP를 사용하면 **기존 웹 인프라를 활용할 수 있다**는 장점이 있음
+- 하지만 모든 사용자에게 같은 품질의 비디오를 보내면, **느린 사용자는 끊기고 빠른 사용자는 대역폭을 충분히 활용하지 못하는 문제**가 생김
+
+### 3-7. DASH (Dynamic Adaptive Streaming over HTTP)
+
+- **DASH** 는 HTTP 기반 적응형 스트리밍 방식임
+- 서버는 비디오를 **여러 개의 청크**로 나누고, 각 청크를 **여러 비트레이트(품질) 버전으로 인코딩**하여 저장함
+- 각 버전별 URL과 관련 정보를 **매니페스트 파일(manifest file)** 에 저장해 둠
+- 클라이언트는 현재 가용 대역폭과 버퍼 상태를 보면서 적절한 품질의 청크를 하나씩 요청함
+
+### 3-8. DASH에서 클라이언트가 하는 일
+
+- DASH에서 중요한 “지능”은 클라이언트 쪽에 있음
+- 클라이언트는
+    - 언제 다음 청크를 요청할지
+    - 어떤 비트레이트 버전을 요청할지
+    - 어느 서버에서 받을지
+    를 결정함
+- 네트워크 상태가 좋으면 더 높은 품질을 요청하고, 나빠지면 더 낮은 품질로 내려감
+- 즉 DASH는 **고정 품질 전송이 아니라, 상황에 맞춰 품질을 조절하는 구조** 임
+- 슬라이드에서는 이를 **encoding + DASH + playout buffering** 의 결합으로 정리함
+
+---
+
+## 4. CDN (Content Distribution Networks)
+
+### 4-1. CDN이 필요한 이유
+
+- 수많은 사용자가 같은 인기 콘텐츠를 볼 때, 단일 거대 서버 하나만 두는 구조는 확장되지 않음
+- 이유는
+    - **단일 실패 지점(single point of failure)** 이 됨
+    - 특정 구간에 혼잡이 집중됨
+    - 멀리 있는 사용자까지 경로가 길어짐
+    - 같은 콘텐츠가 인터넷 구간을 반복해서 지나가 비효율적임
+    때문임
+- 그래서 콘텐츠를 여러 지리적 위치에 복제해 두고, 사용자 가까운 곳에서 제공하는 **CDN** 이 필요함
+
+### 4-2. CDN 배치 철학: Enter Deep와 Bring Home
+
+- CDN 서버를 배치하는 방식에는 두 가지 대표 철학이 있음
+- **Enter Deep**
+    - 액세스 ISP 내부 깊숙한 곳에 많은 서버를 배치하는 방식임
+    - 사용자와 가까워 지연과 혼잡을 줄이기 좋음
+    - Akamai가 대표 예시로 제시됨
+- **Bring Home**
+    - 적은 수의 큰 클러스터를 POP나 IXP 근처에 두는 방식임
+    - 운영은 상대적으로 단순하지만 사용자와의 거리는 더 멀 수 있음
+    - Limelight가 대표 예시로 제시됨
+- 슬라이드에서는 Akamai의 대규모 edge 인프라도 사례로 제시함
 
+### 4-3. CDN 운영의 핵심 문제
+
+- CDN 운영에서 중요한 문제는 크게 두 가지임
+    - 어떤 콘텐츠를 어느 CDN 노드에 둘 것인가
+    - 어떤 사용자를 어느 CDN 노드로 보낼 것인가
+- 슬라이드에서는 이를 OTT 서비스가 인터넷 위에서 품질을 보완하는 응용계층 인프라라고 설명함
 
-TCP : 신뢰성 있는 연결 지향형 전송 프로토콜
+### 4-4. 캐싱 전략: Pull Caching과 Push Caching
+
+- 모든 콘텐츠를 모든 CDN 노드에 둘 필요는 없음
+- **Pull Caching**
+    - 요청이 들어왔을 때 원 서버나 상위 노드에서 가져와 저장하는 방식임
+- **Push Caching**
+    - 비수기에 콘텐츠를 미리 CDN 노드로 밀어 넣는 방식임
+- 따라서 CDN의 콘텐츠 배치는 인기, 예측, 비용, 효율을 함께 고려해야 하는 문제임
 
+### 4-5. DNS 기반 CDN 연결: NetCinema / KingCDN 예시
+
+- CDN에서는 DNS가 단순 이름 해석만 하는 것이 아님
+- 사용자가 `netcinema.com` 비디오 URL을 클릭하면, 콘텐츠 제공자의 권한 DNS는 직접 원 서버 IP를 주지 않고 **KingCDN 쪽 CNAME** 을 반환할 수 있음
+- 이후 로컬 DNS는 KingCDN의 권한 DNS에 다시 질의하고, CDN 쪽은 사용자에게 더 적합한 CDN 서버 IP를 반환함
+- 그 결과 사용자는 실제 원 서버가 아니라, 더 적합한 CDN 서버와 HTTP로 통신하게 됨
+- 즉 CDN의 핵심 메커니즘 중 하나는 **DNS 기반 리디렉션** 임
+
+### 4-6. 클러스터 선택 전략
+
+- 사용자를 어느 CDN 클러스터로 보낼지는 쉬운 문제가 아님
+- 단순히 지리적으로 가까운 곳을 고를 수도 있지만, 실제 인터넷에서는 물리적 거리와 네트워크 성능이 항상 일치하지 않음
+- 그래서 CDN은
+    - LDNS 위치
+    - RTT
+    - 손실률
+    - 처리량
+    - 서버 부하
+    등을 종합해 더 적절한 클러스터를 선택할 수 있음
+- 즉 “가까운 서버”가 항상 “가장 좋은 서버”는 아님
+
+---
+
+## 5. 사례 연구: Google / YouTube와 Netflix
+
+### 5-1. Google / YouTube 사례
+
+- Google은 거대한 **mega data centers**, IXP 근처 클러스터, 액세스 ISP 안쪽의 enter-deep 클러스터를 모두 포함하는 대규모 자체 네트워크를 운영함
+- 동적이고 개인화된 콘텐츠는 데이터센터가 담당하고, 정적 콘텐츠나 YouTube 비디오는 edge 쪽 서버가 더 많이 담당함
+- YouTube는 요청 시 필요한 데이터를 가져오는 **Pull Caching** 과 DNS 리디렉션을 활용함
+- RTT가 낮은 클러스터를 우선 선택하지만, 부하 분산 때문에 항상 가장 가까운 서버만 선택하는 것은 아님
+- 또한 HTTP 스트리밍, byte-range request, prefetch 등을 활용해 전송 효율을 높임
+- 교재에서는 YouTube가 여러 품질 버전을 제공하지만, Netflix식 완전 자동 DASH보다는 사용자가 품질을 수동 선택하는 방향으로 설명함
+
+### 5-2. Netflix의 전체 구조
 
-UDP와 달리 데이터를 보내기 전에 먼저 connection을 설정함
+- Netflix는 **Amazon Cloud** 와 **자체 사설 CDN(Open Connect)** 을 함께 사용하는 구조임
+- Amazon Cloud 쪽에서는 등록, 회계, 카탈로그 탐색, 제어 기능, 콘텐츠 인제스트와 처리 등을 담당함
+- 실제 비디오 전달은 Open Connect CDN이 담당함
+- 즉 제어 기능과 콘텐츠 전달 기능이 분리되어 있음
+
+### 5-3. Open Connect CDN과 캐싱 방식
+
+- Netflix는 많은 IXP와 ISP 내부에 자체 CDN 서버를 배치함
+- 비디오는 여러 비트레이트 버전으로 인코딩된 뒤 CDN 노드들에 저장됨
+- Netflix는 일반적인 pull caching보다 **push caching** 을 더 적극적으로 사용하여, 비수기에 콘텐츠를 미리 CDN에 배포함
+- 따라서 사용자가 요청했을 때, 가까운 위치에서 빠르게 콘텐츠를 받을 수 있게 준비해 두는 구조임
 
+### 5-4. DASH 기반 재생
+
+- 사용자가 어떤 영상을 선택하면, 적절한 서버 정보와 비트레이트 정보가 담긴 매니페스트가 전달됨
+- 이후 클라이언트는 보통 몇 초 단위의 청크를 하나씩 받아 감
+- 현재 네트워크 상태를 보며 다음 청크의 품질을 조절함
+- 즉 Netflix는 **DASH 기반 적응형 스트리밍** 의 대표 사례라고 볼 수 있음
 
-데이터 전송 중 손실, 순서 뒤바뀜, 중복 전송 같은 문제를 처리해줌
+### 5-5. Netflix의 특징
 
+- Netflix는 흔한 CDN처럼 단순히 DNS 리디렉션만 사용하는 것이 아니라, 제어 소프트웨어가 더 직접적으로 어떤 CDN 서버를 사용할지 결정하는 구조로 설명됨
+- 즉 Netflix는 콘텐츠 제어와 CDN 운영을 긴밀하게 결합한 시스템임
 
-애플리케이션 입장에서는 TCP가 순서 있는 안정적인 byte stream을 제공해주는 구조
+---
 
+## 6. 소켓 프로그래밍 (Socket Programming)
 
-TCP의 핵심 특징은 다음과 같음
+### 6-1. 소켓의 의미
 
+- 네트워크 애플리케이션은 보통 서로 다른 종단 시스템에 있는 클라이언트 프로그램과 서버 프로그램으로 구성됨
+- 이 둘이 통신할 때 사용하는 인터페이스가 **socket** 임
+- 소켓은 응용계층 프로세스와 전송계층 사이의 “문(door)”처럼 설명됨
+- 개발자는 이 소켓을 통해 데이터를 읽고 쓰며, 실제 전송은 아래의 TCP 또는 UDP가 담당함
+- 또한 애플리케이션 프로토콜은 공개 표준 기반일 수도 있고 proprietary한 형태일 수도 있음
 
-Connection-oriented : 데이터 전송 전 handshaking으로 연결 설정
+### 6-2. UDP 소켓
 
+- **UDP(`SOCK_DGRAM`)** 는 비연결형(connectionless) 방식임
+- 데이터를 보내기 전 핸드셰이킹이 없음
+- 각 패킷마다 목적지 IP 주소와 포트 번호를 명시해야 함
+- 수신자는 도착한 데이터그램에서 송신자 주소와 포트를 확인할 수 있음
+- 하지만 UDP는 패킷 유실, 순서 뒤바뀜, 중복 제거를 보장하지 않음
+- 즉 **비신뢰적 datagram 서비스** 임
 
-Reliable data transfer : 손실된 데이터 재전송
+### 6-3. UDP 예제 프로그램
 
+- 예제에서는 클라이언트가 문자열을 보내면, 서버가 이를 대문자로 바꿔 다시 돌려주는 UDP 프로그램을 Python으로 보여줌
+- 클라이언트는 `socket(AF_INET, SOCK_DGRAM)`, `sendto()`, `recvfrom()` 을 사용함
+- 서버는 `bind()`, `recvfrom()`, `sendto()` 를 사용함
+- 목적지 주소는 애플리케이션이 지정하지만, 출발지 주소와 포트는 보통 운영체제가 자동으로 붙임
 
-In-order byte stream : 데이터를 순서 있는 바이트 흐름으로 처리
+### 6-4. TCP 소켓
 
+- **TCP(`SOCK_STREAM`)** 는 연결 지향형(connection-oriented) 방식임
+- 데이터를 보내기 전에 클라이언트와 서버 사이에 연결을 먼저 수립함
+- 서버는 먼저 **welcoming socket** 을 만들고 `bind()`, `listen()` 상태에서 연결을 기다림
+- 클라이언트가 `connect()` 하면 서버는 `accept()` 를 통해 그 클라이언트 전용 **connection socket** 을 얻음
+- 이후 실제 데이터 송수신은 그 connection socket에서 이뤄짐
+- TCP는 **신뢰적이고 순서가 보장되는 byte stream 서비스** 를 제공함
 
-Full-duplex : 하나의 연결에서 양방향 데이터 전송 가능
+### 6-5. 여러 이벤트 대기와 timeout
 
+- 네트워크 프로그램은 하나의 이벤트만 기다리는 것이 아니라
+    - 상대 응답
+    - timeout
+    - 여러 소켓에서 오는 응답
+    중 하나를 기다려야 하는 경우가 많음
+- 슬라이드에서는 이를 위해
+    - **timeout**
+    - **select()**
+    - **multithreading**
+    을 언급함
 
-Point-to-point : 하나의 송신자와 하나의 수신자 사이 연결
+### 6-6. settimeout()과 try-except
 
+- Python에서는 `settimeout()` 으로 소켓 연산의 최대 대기 시간을 설정할 수 있음
+- 이 설정은 **그 소켓의 이후 연산들 전체** 에 적용됨
+- 정해진 시간 안에 데이터가 오지 않으면 timeout exception이 발생함
+- 이를 처리하기 위해 `try-except` 문을 사용함
+- 슬라이드에서는 양치기 소년 예시를 통해, 서버에 연결만 하고 메시지를 보내지 않는 상황이 반복되면 더 이상 응답하지 않는 TCP 서버 예시를 보여줌
+- 즉 timeout과 예외 처리는 실제 네트워크 프로그래밍에서 매우 중요한 요소임
 
-Flow control : 수신자 버퍼가 넘치지 않도록 송신량 조절
+### 6-7. SMTP 예시
 
+- 자료에는 SMTP 상호작용 예시도 포함되어 있음
+- `HELO`, `MAIL FROM`, `RCPT TO`, `DATA`, `QUIT` 같은 명령과 서버 응답이 실제로 어떤 순서로 오가는지를 보여줌
+- 이를 통해 응용계층 프로토콜은 **정해진 메시지 형식과 순서에 따라 동작하는 규칙 체계** 라는 점을 확인할 수 있음
 
-Congestion control : 네트워크 혼잡을 줄이기 위한 송신 속도 조절
+---
 
+## 7. 응용계층 정리와 전송 계층 입문
 
-Cumulative ACK : 연속적으로 받은 데이터의 다음 바이트 번호를 ACK로 전송
+### 7-1. 전송 계층의 역할
 
+- 전송 계층은 서로 다른 호스트에서 동작하는 **애플리케이션 프로세스 사이의 논리적 통신** 을 제공함
+- 반면 네트워크 계층은 호스트와 호스트 사이의 통신을 담당함
+- 즉 네트워크 계층이 host-to-host delivery를 담당한다면, 전송 계층은 process-to-process delivery를 담당함
 
-⇒ TCP는 단순히 데이터를 보내는 프로토콜이 아니라, 신뢰성·순서·흐름제어·혼잡제어까지 담당하는 전송계층 프로토콜
+### 7-2. Household Analogy
 
-1-2. TCP Connection
+- 자료에서는 전송 계층과 네트워크 계층의 차이를 집 비유로 설명함
+- 호스트 = 집
+- 프로세스 = 아이들
+- 애플리케이션 메시지 = 편지
+- 전송 프로토콜 = 집 안에서 편지를 분배하는 Ann/Bill
+- 네트워크 프로토콜 = 집 사이를 이동시키는 우편 서비스
+- 이 비유를 통해, 네트워크 계층은 집에서 집까지 전달하고, 전송 계층은 집 안에서 누구에게 전달할지를 책임진다는 점을 설명함
 
+### 7-3. 송신 측과 수신 측 동작
 
-TCP는 데이터를 보내기 전에 먼저 연결을 설정함
+- 송신 측 전송 계층은 응용 메시지를 받아 세그먼트로 만들고, 헤더를 붙여 IP 계층에 넘김
+- 수신 측 전송 계층은 IP로부터 세그먼트를 받아 헤더를 검사한 뒤, 응용 메시지를 꺼내 적절한 소켓으로 올려보냄
+- 이 과정에서 중요한 개념이 **multiplexing / demultiplexing** 임
 
+### 7-4. 인터넷의 표준 전송 프로토콜
 
-이 연결은 실제 물리 회선이 생기는 것이 아니라, 양쪽 호스트가 서로 상태 정보를 유지하는 논리적 연결
+- 인터넷의 대표적인 전송 프로토콜은 TCP와 UDP임
 
+**UDP**
 
-연결이 만들어지면 양쪽 TCP는 다음과 같은 정보를 관리함
+- **프로세스 간 배달과 오류 검출** 정도의 최소 기능만 제공하는 단순한 서비스임
+- 흔히 “no-frills” 또는 best-effort IP의 얇은 확장으로 설명됨
 
+**TCP**
 
-송신 버퍼
-
-
-수신 버퍼
-
-
-sequence number
-
-
-acknowledgement number
-
-
-receive window
-
-
-connection state
-
-
-
-
-TCP는 full-duplex 방식이므로 한쪽이 데이터를 보내는 동시에 받을 수도 있음
-
-
-⇒ TCP connection은 양쪽 호스트가 데이터 전송을 위해 상태를 공유하는 논리적 통신 관계
-
-2. TCP Segment Structure
-2-1. TCP Segment
-
-
-TCP segment : TCP가 네트워크 계층으로 넘기는 데이터 단위
-
-
-TCP segment는 크게 TCP header + application data로 구성됨
-
-
-TCP header에는 신뢰성 있는 전송과 연결 관리를 위한 여러 필드가 들어감
-
-
-주요 필드는 다음과 같음
-
-
-Source port number : 송신 측 포트 번호
-
-
-Destination port number : 수신 측 포트 번호
-
-
-Sequence number : 세그먼트 데이터의 첫 번째 바이트 번호
-
-
-Acknowledgement number : 다음에 받고 싶은 바이트 번호
-
-
-Header length : TCP header 길이
-
-
-Receive window : 수신자가 받을 수 있는 남은 버퍼 공간
-
-
-Checksum : 오류 검출 필드
-
-
-Options : TCP 확장 기능
-
-
-Application data : 애플리케이션에서 내려온 실제 데이터
-
-
-⇒ TCP segment는 단순 데이터 덩어리가 아니라, 데이터 전달 상태를 관리하기 위한 제어 정보까지 포함한 전송 단위
-
-2-2. TCP Flag
-TCP header에는 연결 설정, 종료, ACK 여부 등을 표시하는 flag bit가 있음
-
-
-SYN : 연결 설정 요청
-
-
-ACK : acknowledgement number가 유효하다는 표시
-
-
-FIN : 연결 종료 요청
-
-
-RST : 연결 강제 초기화
-
-
-PSH : 데이터를 즉시 애플리케이션으로 넘기라는 의미
-
-
-URG : 긴급 데이터 존재 표시
-
-
-특히 TCP 연결 설정과 종료에서 중요한 flag는 다음 세 가지임
-
-
-SYN : 연결 시작
-
-
-ACK : 확인 응답
-
-
-FIN : 연결 종료
-
-
-⇒ TCP flag는 TCP 연결 상태를 제어하기 위한 표시값
-
-3. Sequence Number와 ACK
-3-1. Sequence Number
-
-
-Sequence number : 세그먼트 번호가 아니라 데이터의 첫 번째 바이트 번호
-
-
-TCP는 데이터를 segment 단위가 아니라 byte stream으로 보기 때문에 byte 번호를 사용함
-
-
-따라서 TCP에서 중요한 것은 “몇 번째 세그먼트인가”가 아니라 “몇 번째 바이트부터 시작하는가”임
-
-
-예시
-
-
-Sequence number = 100
-
-
-Data size = 20 bytes
-
-
-이 경우 데이터 범위는 다음과 같음
-
-
-byte 100 ~ byte 119
-
-
-⇒ Sequence number 100은 이 세그먼트가 100번 바이트부터 시작한다는 의미
-
-3-2. ACK Number
-
-
-ACK number : 다음에 받고 싶은 바이트 번호
-
-
-마지막으로 받은 바이트 번호가 아니라, 그 다음 번호를 ACK로 보냄
-
-
-예시
-
-
-Sequence number = 100
-
-
-Data size = 20 bytes
-
-
-수신자가 byte 100 ~ byte 119까지 정상 수신
-
-
-이 경우 ACK number는 다음과 같음
-
-
-ACK = 120
-
-
-의미는 다음과 같음
-
-
-119번 바이트까지 받았음
-
-
-다음에는 120번 바이트부터 보내면 됨
-
-
-⇒ ACK number는 마지막으로 받은 번호가 아니라 다음에 기대하는 번호
-
-3-3. Cumulative ACK
-
-
-Cumulative ACK : 연속적으로 받은 마지막 바이트 다음 번호를 ACK로 보내는 방식
-
-
-중간 ACK가 손실되어도 더 큰 ACK가 오면 이전 데이터까지 함께 확인 가능
-
-
-예시
-
-
-ACK = 100 손실
-
-
-이후 ACK = 120 도착
-
-
-이 경우 의미는 다음과 같음
-
-
-byte 119까지 정상 수신
-
-
-ACK=100이 없어도 이전 데이터 수신 확인 가능
-
-
-⇒ Cumulative ACK 덕분에 TCP는 일부 ACK 손실에 비교적 강한 구조
-
-4. RTT와 Timeout
-4-1. RTT
-
-
-RTT : Round Trip Time
-
-
-세그먼트를 보낸 시점부터 해당 세그먼트에 대한 ACK를 받을 때까지 걸린 시간
-
-
-TCP는 RTT를 바탕으로 timeout 시간을 정함
-
-
-timeout 설정이 중요한 이유는 다음과 같음
-
-
-timeout이 너무 짧으면 불필요한 재전송 발생
-
-
-timeout이 너무 길면 실제 손실 복구가 늦어짐
-
-
-⇒ TCP timeout은 너무 빠르지도, 너무 느리지도 않게 설정하는 것이 핵심
-
-4-2. SampleRTT
-
-
-SampleRTT : 실제로 측정한 RTT 값
-
-
-하나의 세그먼트를 보낸 뒤 ACK가 돌아오기까지 걸린 시간
-
-
-단, 재전송된 세그먼트는 SampleRTT 측정에서 제외함
-
-
-재전송 세그먼트를 제외하는 이유는 다음과 같음
-
-
-ACK가 원래 보낸 세그먼트에 대한 것인지
-
-
-재전송된 세그먼트에 대한 것인지 구분이 어려움
-
-
-⇒ SampleRTT는 재전송되지 않은 정상 전송 구간에서 측정한 RTT 값
-
-4-3. EstimatedRTT
-
-
-EstimatedRTT : 여러 SampleRTT를 반영해 부드럽게 만든 RTT 추정값
-
-
-RTT는 계속 변하므로 현재 측정값 하나만 사용하지 않음
-
-
-TCP는 EWMA 방식을 사용해 RTT를 추정함
-
-
-공식은 다음과 같음
-EstimatedRTT = (1 - α) × EstimatedRTT + α × SampleRTT
-
-
-α 값 : 일반적으로 0.125
-
-
-EWMA : 최근 값은 반영하되 과거 값의 영향은 점점 줄어드는 평균 방식
-
-
-⇒ EstimatedRTT는 RTT의 평균적인 흐름을 부드럽게 추정한 값
-
-4-4. DevRTT와 TimeoutInterval
-
-
-DevRTT : RTT 변동성을 나타내는 값
-
-
-RTT가 많이 흔들리면 timeout을 더 넉넉하게 잡아야 함
-
-
-공식은 다음과 같음
-DevRTT = (1 - β) × DevRTT + β × |SampleRTT - EstimatedRTT|
-
-
-β 값 : 일반적으로 0.25
-
-
-최종 timeout 공식은 다음과 같음
-TimeoutInterval = EstimatedRTT + 4 × DevRTT
-⇒ TimeoutInterval은 평균 RTT에 안전 여유분을 더한 값
-
-5. TCP Reliable Data Transfer
-5-1. TCP Sender
-TCP sender는 세 가지 주요 이벤트에 따라 동작함
-
-
-애플리케이션으로부터 데이터 수신
-
-
-timeout 발생
-
-
-ACK 수신
-
-
-애플리케이션 데이터 수신 시
-
-
-데이터를 TCP segment로 만듦
-
-
-segment에 sequence number 부여
-
-
-timer가 꺼져 있으면 timer 시작
-
-
-timer는 가장 오래된 unACKed segment 기준
-
-
-Timeout 발생 시
-
-
-timeout을 발생시킨 segment 재전송
-
-
-timer 재시작
-
-
-ACK 수신 시
-
-
-새롭게 ACK된 데이터가 있으면 SendBase 갱신
-
-
-아직 unACKed data가 남아 있으면 timer 재시작
-
-
-모든 데이터가 ACK되면 timer 정지
-
-
-⇒ TCP sender는 ACK와 timeout을 기준으로 손실 여부를 판단하고 재전송을 수행하는 구조
-
-5-2. SendBase
-
-
-SendBase : 아직 ACK되지 않은 가장 오래된 바이트 번호
-
-
-송신자가 현재 어디까지 ACK를 받았는지 판단하는 기준
-
-
-ACK가 도착하면 SendBase가 앞으로 이동함
-
-
-예시
-
-
-SendBase = 100
-
-
-ACK = 120 도착
-
-
-이 경우 의미는 다음과 같음
-
-
-byte 119까지 수신 확인
-
-
-SendBase는 120으로 이동 가능
-
-
-⇒ SendBase는 송신 윈도우에서 가장 앞쪽에 있는 미확인 데이터 위치
-
-5-3. TCP Receiver
-TCP receiver는 도착한 segment의 순서에 따라 ACK를 다르게 보냄
-
-
-기대한 순서의 segment 도착
-
-
-이미 ACK pending이 있는 상태
-
-
-out-of-order segment 도착
-
-
-gap을 메우는 segment 도착
-
-
-In-order segment 도착
-
-
-기대한 sequence number를 가진 segment
-
-
-바로 ACK를 보내지 않고 잠시 기다릴 수 있음
-
-
-이를 delayed ACK라고 함
-
-
-ACK pending이 있는 경우
-
-
-이미 보낼 ACK가 대기 중인 상태
-
-
-새 in-order segment가 오면 즉시 cumulative ACK 전송
-
-
-Out-of-order segment 도착
-
-
-기대한 번호보다 뒤의 segment가 먼저 도착한 상황
-
-
-중간에 빠진 segment가 있다는 의미
-
-
-receiver는 duplicate ACK 전송
-
-
-Gap을 메우는 segment 도착
-
-
-빠져 있던 segment가 도착한 상황
-
-
-즉시 ACK 전송
-
-
-⇒ TCP receiver는 수신 순서와 gap 존재 여부에 따라 ACK 생성 방식이 달라지는 구조
-
-6. TCP Retransmission
-6-1. Lost ACK
-
-
-Lost ACK : 데이터는 수신자에게 정상 도착했지만 ACK가 손실된 상황
-
-
-송신자는 ACK를 받지 못했으므로 timeout 후 같은 segment를 재전송할 수 있음
-
-
-수신자는 이미 받은 데이터이므로 중복 데이터는 버리고 ACK를 다시 보냄
-
-
-⇒ Lost ACK 상황에서는 데이터 손실이 없어도 재전송이 발생할 수 있음
-
-6-2. Premature Timeout
-
-
-Premature timeout : 실제 손실이 아닌데 timeout이 너무 빨리 발생한 상황
-
-
-네트워크 지연 때문에 ACK가 늦게 온 것뿐인데 송신자가 손실로 오해할 수 있음
-
-
-결과적으로 불필요한 재전송 발생
-
-
-⇒ Premature timeout은 timeout 값을 너무 짧게 잡았을 때 생기는 비효율
-
-6-3. Cumulative ACK에 의한 보완
-
-
-중간 ACK가 손실되어도 이후 더 큰 ACK가 오면 이전 데이터까지 함께 확인 가능
-
-
-TCP의 cumulative ACK 구조 덕분에 ACK 손실이 항상 큰 문제로 이어지지는 않음
-
-
-예시
-
-
-ACK=100 손실
-
-
-이후 ACK=120 수신
-
-
-이 경우 의미는 다음과 같음
-
-
-byte 119까지 정상 수신
-
-
-ACK=100 손실은 ACK=120으로 보완 가능
-
-
-⇒ Cumulative ACK는 이전 ACK 손실을 뒤의 ACK가 덮어줄 수 있는 구조
-
-7. Fast Retransmit
-7-1. Duplicate ACK
-
-
-Duplicate ACK : 같은 ACK number가 반복해서 도착하는 것
-
-
-보통 중간에 특정 segment가 빠졌다는 신호로 해석 가능
-
-
-수신자는 out-of-order segment를 받을 때마다 마지막으로 연속 수신한 위치를 ACK로 반복 전송함
-
-
-예시
-
-
-수신자가 byte 100부터 기다리는 중
-
-
-byte 120 이후 데이터가 먼저 도착
-
-
-receiver는 계속 ACK=100 전송
-
-
-⇒ Duplicate ACK는 수신자가 아직 특정 바이트를 기다리고 있다는 신호
-
-7-2. Fast Retransmit
-
-
-Fast retransmit : timeout을 기다리지 않고 손실 segment를 빠르게 재전송하는 기능
-
-
-송신자가 같은 ACK를 3개 추가로 받으면 손실 가능성이 높다고 판단함
-
-
-이때 가장 작은 sequence number의 unACKed segment를 즉시 재전송함
-
-
-동작 흐름은 다음과 같음
-
-
-특정 segment 손실
-
-
-이후 segment들이 receiver에게 도착
-
-
-receiver가 같은 ACK 반복 전송
-
-
-sender가 3 duplicate ACK 수신
-
-
-sender가 timeout 전 손실 segment 재전송
-
-
-⇒ Fast retransmit은 timeout 기반 재전송보다 빠른 손실 복구 방식
-
-8. Flow Control
-8-1. Flow Control
-
-
-Flow control : 수신자 버퍼가 넘치지 않도록 송신량을 조절하는 기능
-
-
-수신 애플리케이션이 데이터를 천천히 읽으면 TCP receive buffer에 데이터가 쌓임
-
-
-이 상태에서 송신자가 계속 빠르게 보내면 buffer overflow 가능
-
-
-⇒ Flow control의 목적은 receiver buffer overflow 방지
-
-8-2. Receive Window
-
-
-Receive window : 수신자가 현재 받을 수 있는 남은 버퍼 공간
-
-
-줄여서 rwnd
-
-
-TCP header의 receive window field에 들어감
-
-
-receiver는 자신의 남은 버퍼 공간을 rwnd로 sender에게 알림
-
-
-공식처럼 이해하면 다음과 같음
-in-flight data ≤ rwnd
-
-
-in-flight data : 보냈지만 아직 ACK를 받지 못한 데이터
-
-
-rwnd : 수신자가 더 받을 수 있는 데이터 양
-
-
-⇒ Sender는 rwnd보다 많은 unACKed data를 보내지 않음
-
-8-3. Flow Control과 Congestion Control 차이
-
-
-Flow control : 수신자 버퍼 보호 목적
-
-
-Congestion control : 네트워크 혼잡 방지 목적
-
-
-둘의 차이는 다음과 같음
-
-
-Flow control의 기준 : receiver의 처리 속도와 버퍼 여유 공간
-
-
-Congestion control의 기준 : network의 혼잡 상태
-
-
-Flow control 문제 상황 : receiver가 데이터를 빨리 못 읽는 상황
-
-
-Congestion control 문제 상황 : network에 너무 많은 트래픽이 몰리는 상황
-
-
-⇒ Flow control은 수신자 문제, congestion control은 네트워크 문제
-
-9. TCP Connection Management
-9-1. Connection Management
-
-
-TCP connection management : TCP 연결 설정과 종료를 관리하는 기능
-
-
-데이터 전송 전에 양쪽은 먼저 연결 의사와 초기 상태를 맞춰야 함
-
-
-이 과정에서 초기 sequence number, buffer 정보, 연결 상태 등이 설정됨
-
-
-⇒ TCP는 연결 설정 없이 바로 데이터를 보내지 않고, 먼저 양쪽 상태를 맞춘 뒤 전송 시작
-
-9-2. 2-way Handshake의 문제점
-
-
-2-way handshake : 두 번의 메시지 교환만으로 연결을 설정하는 방식
-
-
-하지만 실제 네트워크에서는 메시지 지연, 손실, 재전송, 순서 바뀜이 발생 가능
-
-
-오래된 연결 요청이 나중에 도착하면 서버가 이를 새로운 요청으로 오해할 수 있음
-
-
-문제 상황은 다음과 같음
-
-
-client는 이미 종료됨
-
-
-오래된 connection request가 server에 도착
-
-
-server는 새로운 연결로 착각
-
-
-server만 연결되었다고 생각
-
-
-이를 half-open connection이라고 함
-⇒ 2-way handshake는 오래된 메시지나 지연된 재전송에 취약한 방식
-
-9-3. TCP 3-way Handshake
-
-
-TCP 3-way handshake : SYN → SYNACK → ACK 순서로 연결을 설정하는 과정
-
-
-양쪽이 살아 있고 연결할 의사가 있음을 확인하기 위한 절차
-
-
-1단계 : Client → Server
-
-
-SYN = 1
-
-
-Seq = x
-
-
-의미는 다음과 같음
-
-
-client가 연결 요청
-
-
-client의 초기 sequence number는 x
-
-
-2단계 : Server → Client
-
-
-SYN = 1
-
-
-ACK = 1
-
-
-Seq = y
-
-
-ACKnum = x + 1
-
-
-의미는 다음과 같음
-
-
-server가 client의 SYN 수신 확인
-
-
-server도 연결 의사 있음
-
-
-server의 초기 sequence number는 y
-
-
-3단계 : Client → Server
-
-
-ACK = 1
-
-
-ACKnum = y + 1
-
-
-의미는 다음과 같음
-
-
-client가 server의 SYN 수신 확인
-
-
-⇒ 3-way handshake가 끝나면 양쪽 모두 ESTABLISHED 상태
-
-9-4. TCP 연결 종료
-
-
-TCP 연결 종료에는 FIN과 ACK 사용
-
-
-TCP는 양방향 통신이므로 각 방향의 연결을 따로 닫음
-
-
-한쪽이 FIN을 보내면 “나는 이제 이 방향으로 데이터 안 보냄”이라는 의미
-
-
-상대방은 FIN을 받으면 ACK로 응답함
-
-
-상대방도 보낼 데이터가 끝나면 자신의 FIN을 보냄
-
-
-정리하면 다음과 같음
-
-
-FIN : 데이터 전송 종료 요청
-
-
-ACK : 종료 요청 수신 확인
-
-
-양방향 FIN/ACK 완료 : TCP 연결 종료
-
-
-⇒ TCP 종료는 한 번에 끊는 것이 아니라 양쪽 방향을 각각 정리하는 과정
-
-10. Network Layer Control Plane
-10-1. Data Plane과 Control Plane
-
-
-네트워크 계층은 크게 data plane과 control plane으로 나눌 수 있음
-
-
-Data Plane
-
-
-실제 패킷을 라우터 입력 포트에서 출력 포트로 전달하는 기능
-
-
-라우터 내부에서 빠르게 수행되는 동작
-
-
-핵심 기능은 forwarding
-
-
-Control Plane
-
-
-패킷이 목적지까지 어떤 경로로 갈지 결정하는 기능
-
-
-네트워크 전체 경로 계산과 관련됨
-
-
-핵심 기능은 routing
-
-
-⇒ Data plane은 패킷 전달, control plane은 경로 결정
-
-10-2. Forwarding과 Routing
-
-
-Forwarding : 라우터가 들어온 패킷을 어느 출력 포트로 내보낼지 결정하는 동작
-
-
-Routing : 출발지에서 목적지까지 어떤 경로를 사용할지 결정하는 과정
-
-
-차이는 다음과 같음
-
-
-Forwarding : local action
-
-
-Routing : network-wide process
-
-
-Forwarding 기준 : packet header와 forwarding table
-
-
-Routing 기준 : routing algorithm과 network topology
-
-
-⇒ Forwarding은 라우터 내부의 포트 선택, routing은 전체 경로 계산
-
-10-3. Per-router Control Plane
-
-
-Per-router control plane : 각 라우터가 자기 안에서 routing algorithm을 실행하는 방식
-
-
-전통적인 네트워크 제어 방식
-
-
-라우터들이 서로 routing 정보를 교환함
-
-
-각 라우터가 자신의 forwarding table을 계산함
-
-
-특징은 다음과 같음
-
-
-제어 기능이 각 라우터에 분산됨
-
-
-각 라우터가 독립적으로 계산 수행
-
-
-OSPF, BGP 같은 전통적 라우팅 프로토콜과 관련
-
-
-⇒ Per-router control plane은 각 라우터가 스스로 경로 계산에 참여하는 분산형 구조
-
-10-4. SDN Control Plane
-
-
-SDN control plane : 논리적으로 중앙화된 controller가 forwarding table을 계산하는 방식
-
-
-각 라우터가 직접 경로를 계산하기보다는, remote controller가 경로와 forwarding rule을 계산함
-
-
-계산된 forwarding table은 라우터에 설치됨
-
-
-특징은 다음과 같음
-
-
-제어 기능이 controller에 집중됨
-
-
-라우터는 주로 data plane 역할 수행
-
-
-네트워크 정책 적용이 유연함
-
-
-OpenFlow, ODL, ONOS 등과 관련
-
-
-⇒ SDN control plane은 중앙 controller가 제어하고 라우터는 전달에 집중하는 구조
-
-11. Routing Protocols
-11-1. Routing Protocol의 목표
-
-
-Routing protocol : 송신 호스트에서 수신 호스트까지 좋은 경로를 찾기 위한 프로토콜
-
-
-여기서 좋은 경로는 상황에 따라 다르게 정의 가능
-
-
-좋은 경로의 기준은 다음과 같음
-
-
-비용이 낮은 경로
-
-
-빠른 경로
-
-
-혼잡이 적은 경로
-
-
-링크 품질이 좋은 경로
-
-
-Path : 패킷이 출발지에서 목적지까지 지나가는 라우터들의 순서
-
-
-⇒ Routing protocol의 목적은 목적지까지 효율적인 path를 찾는 것
-
-11-2. Graph Abstraction
-
-
-네트워크는 그래프로 표현 가능
-
-
-그래프는 G = (N, E) 형태
-
-
-각 요소는 다음과 같음
-
-
-N : 라우터들의 집합
-
-
-E : 라우터들을 연결하는 링크들의 집합
-
-
-Link cost : 링크를 사용하는 데 드는 비용
-
-
-c(x, y) : x와 y 사이 링크의 비용
-
-
-직접 연결이 없는 경우는 다음과 같음
-
-
-cost = ∞
-
-
-cost는 네트워크 운영자가 정할 수 있음
-
-
-모든 링크 cost를 1로 설정
-
-
-bandwidth가 클수록 cost를 낮게 설정
-
-
-congestion이 심할수록 cost를 높게 설정
-
-
-⇒ Graph abstraction은 라우팅 알고리즘에서 경로 계산을 하기 위한 네트워크 표현 방식
-
-11-3. Routing Algorithm 분류
-Routing algorithm은 정보 범위와 경로 변화 속도에 따라 분류 가능
-Global Routing Algorithm
-
-
-모든 라우터가 전체 topology와 link cost 정보를 알고 있는 방식
-
-
-대표 예시는 link-state algorithm
-
-
-전체 지도를 알고 최단 경로를 계산하는 방식
-
-
-Decentralized Routing Algorithm
-
-
-각 라우터가 처음에는 자신과 직접 연결된 이웃 정보만 알고 있는 방식
-
-
-이웃과 정보를 반복적으로 교환하면서 경로를 계산함
-
-
-대표 예시는 distance-vector algorithm
-
-
-Static Routing
-
-
-경로가 천천히 변하거나 거의 고정된 방식
-
-
-관리자가 직접 설정하는 경우가 많음
-
-
-Dynamic Routing
-
-
-네트워크 상태 변화에 따라 경로가 자동으로 바뀌는 방식
-
-
-링크 비용 변화, 장애, 혼잡 등에 반응 가능
-
-
-⇒ Routing algorithm은 전체 정보를 쓰는지, 이웃 정보만 쓰는지 / 경로가 고정인지 동적인지로 구분 가능
-
-12. 핵심 비교 정리
-12-1. Sequence Number vs ACK Number
-
-
-Sequence number : 내가 보내는 데이터의 첫 번째 바이트 번호
-
-
-ACK number : 내가 다음에 받고 싶은 상대방 데이터의 바이트 번호
-
-
-예시
-
-
-Seq = 100, data = 20 bytes
-
-
-데이터 범위 = 100 ~ 119
-
-
-ACK = 120
-
-
-⇒ ACK는 받은 번호가 아니라 다음에 받고 싶은 번호
-
-12-2. Timeout vs Fast Retransmit
-
-
-Timeout : 일정 시간 안에 ACK가 오지 않으면 재전송
-
-
-Fast retransmit : 3 duplicate ACK를 받으면 timeout 전 재전송
-
-
-차이는 다음과 같음
-
-
-Timeout : 시간 기반 손실 판단
-
-
-Fast retransmit : duplicate ACK 기반 손실 판단
-
-
-⇒ Fast retransmit은 timeout보다 빠른 손실 복구 방법
-
-12-3. Flow Control vs Congestion Control
-
-
-Flow control : 수신자 버퍼 overflow 방지
-
-
-Congestion control : 네트워크 혼잡 방지
-
-
-차이는 다음과 같음
-
-
-Flow control 대상 : receiver
-
-
-Congestion control 대상 : network
-
-
-Flow control 기준 : rwnd
-
-
-Congestion control 기준 : 네트워크 혼잡 상태
-
-
-⇒ Flow control은 수신자 보호, congestion control은 네트워크 보호
-
-12-4. Forwarding vs Routing
-
-
-Forwarding : 라우터 내부에서 패킷을 어느 출력 포트로 보낼지 결정
-
-
-Routing : 출발지부터 목적지까지 전체 경로 결정
-
-
-차이는 다음과 같음
-
-
-Forwarding : local action
-
-
-Routing : network-wide process
-
-
-⇒ Forwarding은 포트 선택, routing은 경로 계산
-
-12-5. Per-router Control Plane vs SDN Control Plane
-
-
-Per-router control plane : 각 라우터가 직접 routing algorithm 실행
-
-
-SDN control plane : 중앙 controller가 forwarding table 계산 후 라우터에 설치
-
-
-차이는 다음과 같음
-
-
-Per-router : 분산형 제어
-
-
-SDN : 논리적 중앙집중형 제어
-
-
-Per-router 라우터 : 경로 계산 + 패킷 전달
-
-
-SDN 라우터 : 주로 패킷 전달
-
-
-⇒ Per-router는 각 라우터가 스스로 계산, SDN은 controller가 계산
+- reliable, in-order delivery 제공
+- flow control 제공
+- congestion control 제공
+- connection setup 필요함
+- 슬라이드에서는 **TCP와 UDP 모두** 애플리케이션에 대해 **지연 보장** 이나 **대역폭 보장** 자체를 제공하는 것은 아니라고 정리함
